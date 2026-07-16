@@ -90,6 +90,8 @@ class SensorReader:
         # Try common direct I2C IMUs used by Sense HAT / other HATs
         if self._init_lsm_i2c():
             return True
+        if self._init_icm20948_i2c():
+            return True
         if self._init_mpu_i2c():
             return True
         # Fall back to Sense HAT
@@ -190,6 +192,47 @@ class SensorReader:
                 print(f"⚠ MPU initialization failed at 0x{addr:02x}: {e}")
 
         return False
+
+    def _icm20948_bank(self, bank):
+        self.i2c_bus.write_byte_data(self.sensor_addr, 0x7F, bank << 4)
+
+    def _init_icm20948_i2c(self):
+        """Try to initialize Waveshare Sense HAT (B) ICM-20948 at 0x68."""
+        if not HAS_SMBUS:
+            return False
+
+        try:
+            bus = smbus.SMBus(1)
+            addr = 0x68
+            self.i2c_bus = bus
+            self.sensor_addr = addr
+
+            self._icm20948_bank(0)
+            who = bus.read_byte_data(addr, 0x00)
+            if who != 0xEA:
+                print(f"⚠ ICM-20948 not found at 0x68, WHO_AM_I=0x{who:02x}")
+                return False
+
+            # Wake device and use auto clock source.
+            bus.write_byte_data(addr, 0x06, 0x01)  # PWR_MGMT_1
+            bus.write_byte_data(addr, 0x07, 0x00)  # PWR_MGMT_2: accel/gyro enabled
+
+            # Configure accelerometer for ±2g.
+            self._icm20948_bank(2)
+            bus.write_byte_data(addr, 0x14, 0x00)  # ACCEL_CONFIG
+            self._icm20948_bank(0)
+            time.sleep(0.1)
+
+            self.sensor_type = 'icm20948'
+
+            print("✓ ICM-20948 accelerometer initialized (0x68)")
+            print("  Using: Direct I2C reads")
+            print("  Calculating: Display rotation from gravity projection")
+            print()
+            return True
+        except Exception as e:
+            print(f"⚠ ICM-20948 initialization failed: {e}")
+            return False
 
     def _init_sense_hat(self):
         """Try to initialize Sense HAT"""
@@ -298,6 +341,29 @@ class SensorReader:
             print(f"Error reading MPU accelerometer: {e}")
             return {'x': 0, 'y': -1, 'z': 0}
 
+    def _read_icm20948_accel(self):
+        """Read ICM-20948 accelerometer via I2C."""
+        try:
+            bus = self.i2c_bus
+            addr = self.sensor_addr
+            self._icm20948_bank(0)
+
+            def read_be(high_reg, low_reg):
+                high = bus.read_byte_data(addr, high_reg)
+                low = bus.read_byte_data(addr, low_reg)
+                value = (high << 8) | low
+                if value > 32767:
+                    value -= 65536
+                return value
+
+            x = read_be(0x2D, 0x2E) / 16384.0
+            y = read_be(0x2F, 0x30) / 16384.0
+            z = read_be(0x31, 0x32) / 16384.0
+            return {'x': x, 'y': y, 'z': z}
+        except Exception as e:
+            print(f"Error reading ICM-20948 accelerometer: {e}")
+            return {'x': 0, 'y': -1, 'z': 0}
+
     def read_orientation(self):
         """Read orientation and calculate display rotation from gravity"""
         if self.sensor_type == 'lsm303dlhc':
@@ -337,6 +403,23 @@ class SensorReader:
 
         if self.sensor_type == 'mpu':
             accel = self._read_mpu_accel()
+            x = accel['x']
+            y = accel['y']
+
+            angle_rad = math.atan2(x, y)
+            angle_deg = math.degrees(angle_rad)
+            if angle_deg < 0:
+                angle_deg += 360
+
+            return {
+                'display_angle': angle_deg,
+                'accel_x': x,
+                'accel_y': y,
+                'accel_z': accel['z']
+            }
+
+        if self.sensor_type == 'icm20948':
+            accel = self._read_icm20948_accel()
             x = accel['x']
             y = accel['y']
 

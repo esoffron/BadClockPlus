@@ -45,7 +45,7 @@ def scan_i2c():
         0x53: "ADXL345 Accelerometer",
         0x5c: "AM2320 Temp/Humidity",
         0x5f: "HTS221 Humidity",
-        0x68: "MPU6050/MPU9250 IMU",
+        0x68: "ICM-20948 IMU (Waveshare Sense HAT B) or MPU6050/MPU9250",
         0x69: "MPU6050/MPU9250 IMU (alt address)",
         0x6a: "LSM6DS3 or LSM9DS1 IMU (Sense HAT)",
         0x6b: "LSM9DS1 IMU",
@@ -61,6 +61,33 @@ def scan_i2c():
 def test_mpu(bus, addr):
     """Test MPU6050/MPU9250"""
     try:
+        # ICM-20948 uses a different register map, but also commonly lives at 0x68.
+        try:
+            bus.write_byte_data(addr, 0x7F, 0x00)
+            who = bus.read_byte_data(addr, 0x00)
+            if who == 0xEA:
+                print(f"  WHO_AM_I: 0x{who:02x}")
+                print("  Identified as: ICM-20948")
+                bus.write_byte_data(addr, 0x06, 0x01)  # PWR_MGMT_1
+                bus.write_byte_data(addr, 0x07, 0x00)  # PWR_MGMT_2
+                bus.write_byte_data(addr, 0x7F, 0x20)  # Bank 2
+                bus.write_byte_data(addr, 0x14, 0x00)  # ACCEL_CONFIG ±2g
+                bus.write_byte_data(addr, 0x7F, 0x00)  # Bank 0
+                time.sleep(0.1)
+
+                high = bus.read_byte_data(addr, 0x2D)
+                low = bus.read_byte_data(addr, 0x2E)
+                value = (high << 8) | low
+                if value > 32768:
+                    value -= 65536
+                ax = value / 16384.0
+
+                print(f"  Accel X: {ax:.3f}g")
+                print("  ✓ ICM-20948 sensor working!")
+                return True
+        except:
+            pass
+
         # Wake up
         bus.write_byte_data(addr, 0x6B, 0)
         time.sleep(0.1)
