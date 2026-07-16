@@ -7,6 +7,7 @@ for stable orientation readings
 
 from flask import Flask, jsonify, send_file, Response, stream_with_context
 from flask_cors import CORS
+from pathlib import Path
 import time
 import math
 import threading
@@ -33,6 +34,7 @@ except ImportError:
 
 app = Flask(__name__)
 CORS(app)
+BASE_DIR = Path(__file__).resolve().parent
 
 
 @app.after_request
@@ -676,13 +678,13 @@ encoder.start_reading()
 @app.route('/')
 def index():
     """Serve the clock HTML page"""
-    return send_file('/home/admin/clock/index.html')
+    return send_file(BASE_DIR / 'index.html')
 
 
 @app.route('/font/<path:filename>')
 def serve_font(filename):
     """Serve font files"""
-    return send_file(f'/home/admin/clock/font/{filename}')
+    return send_file(BASE_DIR / 'font' / filename)
 
 
 @app.route('/orientation')
