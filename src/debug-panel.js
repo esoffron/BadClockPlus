@@ -67,6 +67,12 @@ export class DebugPanel {
             clock.debug.setForceDetachOnDrag(e.target.checked);
         });
 
+        const flyingToastersCheckbox = document.getElementById('flying-toasters-checkbox');
+        flyingToastersCheckbox.checked = clock.toasters.active;
+        flyingToastersCheckbox.addEventListener('change', (e) => {
+            clock.debug.toasters(e.target.checked);
+        });
+
         const orientSlider = document.getElementById('orientation-slider');
         const orientValue = document.getElementById('orientation-slider-value');
         orientSlider.addEventListener('input', () => {
