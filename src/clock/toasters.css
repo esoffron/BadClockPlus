@@ -1,0 +1,75 @@
+.toaster-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.toaster-layer.paused {
+    display: none;
+}
+
+.toaster-layer--back {
+    z-index: 0;
+}
+
+.toaster-layer--front {
+    z-index: 12;
+}
+
+.toaster,
+.toast {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 64px;
+    height: 64px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    transform: translate3d(var(--start-x), var(--start-y), 0) scale(var(--scale));
+    animation: toaster-fly var(--duration) linear forwards;
+    will-change: transform, background-position;
+}
+
+.toaster {
+    background-image: url('/img/toaster-sprite.gif');
+    animation:
+        toaster-flap 0.2s steps(4) infinite alternate,
+        toaster-fly var(--duration) linear forwards;
+}
+
+.toaster--reverse-flap {
+    animation:
+        toaster-flap 0.2s steps(4) infinite alternate-reverse,
+        toaster-fly var(--duration) linear forwards;
+}
+
+.toast {
+    background-image: url('/img/toast1.gif');
+}
+
+@keyframes toaster-flap {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: -256px 0;
+    }
+}
+
+@keyframes toaster-fly {
+    from {
+        transform: translate3d(var(--start-x), var(--start-y), 0) scale(var(--scale));
+    }
+    to {
+        transform: translate3d(var(--end-x), var(--end-y), 0) scale(var(--scale));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toaster,
+    .toast {
+        animation-duration: 24s;
+    }
+}

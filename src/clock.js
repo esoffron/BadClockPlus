@@ -7,6 +7,7 @@ import { DigitalClock } from './clock/digital.js';
 import { Hand } from './clock/hand.js';
 import { Menu } from './clock/menu.js';
 import { ModeSwitcher } from './clock/mode-switcher.js';
+import { ToasterSwarm } from './clock/toasters.js';
 import { RotationController } from './rotation-controller.js';
 import { ShakeDetector } from './shake-detector.js';
 
@@ -20,6 +21,7 @@ export class Clock {
         const digitalEl = el.querySelector('#digital');
         this.analogClock = new AnalogClock(analogEl, this.time);
         this.digitalClock = new DigitalClock(digitalEl, this.time);
+        this.toasters = new ToasterSwarm(el);
 
         // Mode switching
         this.modes = new ModeSwitcher();
@@ -196,6 +198,14 @@ export class Clock {
         energy: (e) => this.analogClock.debugSetEnergy(e),
         crown: (show = true) => this.analogClock.debugCrown(show),
         beans: () => this.analogClock.debugBeans(),
+        toasters: (on) => {
+            if (typeof on === 'boolean') {
+                this.toasters.setActive(on);
+                return this.toasters.active;
+            }
+            return this.toasters.toggle();
+        },
+        toasterBurst: (count = 5) => this.toasters.burst(count),
         flicker: () => this.digitalClock.debugFlicker(),
         decay: (min = 5) => this.digitalClock.debugDecay(min),
         shake: () => this.enterShakeMode(),
@@ -209,6 +219,8 @@ export class Clock {
                 'energy(0..1)':    'Set crown winding energy',
                 'crown(bool)':     'Show/hide the crown',
                 'beans()':         'Pour baked beans onto the clock face',
+                'toasters(bool)':   'Toggle flying toasters',
+                'toasterBurst(n)':  'Launch a burst of flying toasters',
                 'flicker()':       'Random digital segment flicker',
                 'decay(minutes)':  'Age digital segments',
                 'shake()':         'Enter gravity mode',
@@ -263,12 +275,13 @@ export class Clock {
     triggerRandomQuirk() {
         const quirks = this.currentMode === 'digital'
             ? ['flicker', 'decay']
-            : ['shake', 'beans', 'overwind'];
+            : ['shake', 'beans', 'overwind', 'toasters'];
         const pick = quirks[Math.floor(Math.random() * quirks.length)];
         switch (pick) {
             case 'shake':    this.enterShakeMode(); break;
             case 'beans':    this.analogClock.debugBeans(); break;
             case 'overwind': this.analogClock.debugOverwind(); break;
+            case 'toasters': this.toasters.burst(5); break;
             case 'dst':      this.simulateDST(); break;
             case 'flicker':  this.digitalClock.debugFlicker(); break;
             case 'decay':    this.digitalClock.debugDecay(Math.floor(Math.random() * 30) + 1); break;
@@ -280,6 +293,7 @@ export class Clock {
             case 'reset':  setTimeout(() => window.location.reload(), 2700); break;
             case 'shake':  this.enterShakeMode(); break;
             case 'beans':  this.analogClock.debugBeans(); break;
+            case 'toasters': this.toasters.toggle(); break;
             case 'random': this.triggerRandomQuirk(); break;
         }
     }
@@ -319,6 +333,7 @@ export class Clock {
         }
 
         const switching = Date.now() < this._modeSwitchUntil;
+        this.toasters.setMode(this.currentMode);
         this.analogClock.visible = this.currentMode !== 'digital' || switching;
         this.analogClock.update();
         if (this.currentMode === 'digital' || switching) {

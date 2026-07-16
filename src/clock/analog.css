@@ -156,6 +156,10 @@ body.debug-mode .debug-overlay {
     display: none;
 }
 
+#analog-toasters-back {
+    z-index: 0;
+}
+
 #horizon-line.visible {
     display: block;
 }
