@@ -425,8 +425,9 @@ class SensorReader:
 
             angle_rad = math.atan2(x, y)
             # Waveshare Sense HAT (B) has its ICM-20948 Y axis opposite the
-            # display orientation used by this clock mount.
-            angle_deg = math.degrees(angle_rad)
+            # display orientation used by this clock mount. The sign is flipped
+            # so clockwise physical rotation increases display_angle.
+            angle_deg = -math.degrees(angle_rad)
             if angle_deg < 0:
                 angle_deg += 360
 
