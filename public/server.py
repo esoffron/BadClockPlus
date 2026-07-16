@@ -29,6 +29,16 @@ except ImportError:
 app = Flask(__name__)
 CORS(app)
 
+
+@app.after_request
+def add_browser_bridge_headers(response):
+    """Allow GitHub Pages or other hosted UI origins to read the local Pi bridge."""
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Private-Network'] = 'true'
+    return response
+
 # ============================================================
 # SENSOR CONFIGURATION
 # ============================================================
