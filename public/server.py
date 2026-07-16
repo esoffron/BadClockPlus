@@ -407,9 +407,13 @@ class SensorReader:
             y = accel['y']
 
             angle_rad = math.atan2(x, y)
-            angle_deg = math.degrees(angle_rad)
+            # Waveshare Sense HAT (B) mounts the ICM-20948 axes opposite the
+            # display orientation used by the clock face.
+            angle_deg = math.degrees(angle_rad) + 180
             if angle_deg < 0:
                 angle_deg += 360
+            if angle_deg >= 360:
+                angle_deg -= 360
 
             return {
                 'display_angle': angle_deg,
