@@ -87,6 +87,11 @@ class SensorReader:
         # Try LSM303DLHC first (Adafruit breakout at 0x19)
         if self._init_lsm303dlhc():
             return True
+        # Try common direct I2C IMUs used by Sense HAT / other HATs
+        if self._init_lsm_i2c():
+            return True
+        if self._init_mpu_i2c():
+            return True
         # Fall back to Sense HAT
         if self._init_sense_hat():
             return True
@@ -120,6 +125,71 @@ class SensorReader:
         except Exception as e:
             print(f"⚠ LSM303DLHC initialization failed: {e}")
             return False
+
+    def _init_lsm_i2c(self):
+        """Try to initialize LSM6DS3/LSM9DS1-compatible accelerometer at 0x6a."""
+        if not HAS_SMBUS:
+            return False
+
+        try:
+            bus = smbus.SMBus(1)
+            addr = 0x6a
+            who = bus.read_byte_data(addr, 0x0F)
+
+            if who == 0x69:
+                variant = 'lsm6ds3'
+                # CTRL1_XL: ODR=104Hz, ±2g
+                bus.write_byte_data(addr, 0x10, 0x40)
+            elif who == 0x68:
+                variant = 'lsm9ds1'
+                # CTRL_REG5_XL: enable all axes
+                bus.write_byte_data(addr, 0x1F, 0x38)
+                # CTRL_REG6_XL: ODR=119Hz, ±2g
+                bus.write_byte_data(addr, 0x20, 0x60)
+            else:
+                print(f"⚠ LSM-compatible sensor at 0x6a has unknown WHO_AM_I: 0x{who:02x}")
+                return False
+
+            time.sleep(0.1)
+            self.i2c_bus = bus
+            self.sensor_addr = addr
+            self.sensor_type = variant
+
+            print(f"✓ {variant.upper()} accelerometer initialized (0x6a)")
+            print("  Using: Direct I2C reads")
+            print("  Calculating: Display rotation from gravity projection")
+            print()
+            return True
+        except Exception as e:
+            print(f"⚠ LSM I2C initialization failed: {e}")
+            return False
+
+    def _init_mpu_i2c(self):
+        """Try to initialize MPU6050/MPU9250-compatible accelerometer."""
+        if not HAS_SMBUS:
+            return False
+
+        for addr in (0x68, 0x69):
+            try:
+                bus = smbus.SMBus(1)
+                who = bus.read_byte_data(addr, 0x75)
+                # Wake device from sleep.
+                bus.write_byte_data(addr, 0x6B, 0x00)
+                time.sleep(0.1)
+
+                self.i2c_bus = bus
+                self.sensor_addr = addr
+                self.sensor_type = 'mpu'
+
+                print(f"✓ MPU accelerometer initialized (0x{addr:02x}, WHO_AM_I=0x{who:02x})")
+                print("  Using: Direct I2C reads")
+                print("  Calculating: Display rotation from gravity projection")
+                print()
+                return True
+            except Exception as e:
+                print(f"⚠ MPU initialization failed at 0x{addr:02x}: {e}")
+
+        return False
 
     def _init_sense_hat(self):
         """Try to initialize Sense HAT"""
@@ -160,6 +230,16 @@ class SensorReader:
 
         return {'x': 0, 'y': -1, 'z': 0}
 
+    def _read_signed_16(self, low_reg, high_reg, addr=None):
+        bus = self.i2c_bus
+        addr = addr if addr is not None else self.sensor_addr
+        low = bus.read_byte_data(addr, low_reg)
+        high = bus.read_byte_data(addr, high_reg)
+        value = (high << 8) | low
+        if value > 32767:
+            value -= 65536
+        return value
+
     def _read_lsm303dlhc_accel(self):
         """Read LSM303DLHC accelerometer via I2C"""
         try:
@@ -185,6 +265,39 @@ class SensorReader:
         except:
             return {'x': 0, 'y': -1, 'z': 0}
 
+    def _read_lsm_i2c_accel(self):
+        """Read LSM6DS3/LSM9DS1 accelerometer via I2C."""
+        try:
+            x = self._read_signed_16(0x28, 0x29) / 16384.0
+            y = self._read_signed_16(0x2A, 0x2B) / 16384.0
+            z = self._read_signed_16(0x2C, 0x2D) / 16384.0
+            return {'x': x, 'y': y, 'z': z}
+        except Exception as e:
+            print(f"Error reading {self.sensor_type} accelerometer: {e}")
+            return {'x': 0, 'y': -1, 'z': 0}
+
+    def _read_mpu_accel(self):
+        """Read MPU6050/MPU9250 accelerometer via I2C."""
+        try:
+            bus = self.i2c_bus
+            addr = self.sensor_addr
+
+            def read_be(high_reg, low_reg):
+                high = bus.read_byte_data(addr, high_reg)
+                low = bus.read_byte_data(addr, low_reg)
+                value = (high << 8) | low
+                if value > 32767:
+                    value -= 65536
+                return value
+
+            x = read_be(0x3B, 0x3C) / 16384.0
+            y = read_be(0x3D, 0x3E) / 16384.0
+            z = read_be(0x3F, 0x40) / 16384.0
+            return {'x': x, 'y': y, 'z': z}
+        except Exception as e:
+            print(f"Error reading MPU accelerometer: {e}")
+            return {'x': 0, 'y': -1, 'z': 0}
+
     def read_orientation(self):
         """Read orientation and calculate display rotation from gravity"""
         if self.sensor_type == 'lsm303dlhc':
@@ -194,6 +307,40 @@ class SensorReader:
 
             # LSM303DLHC axes are rotated 90° vs Sense HAT
             angle_rad = math.atan2(-y, x)
+            angle_deg = math.degrees(angle_rad)
+            if angle_deg < 0:
+                angle_deg += 360
+
+            return {
+                'display_angle': angle_deg,
+                'accel_x': x,
+                'accel_y': y,
+                'accel_z': accel['z']
+            }
+
+        if self.sensor_type in ('lsm6ds3', 'lsm9ds1'):
+            accel = self._read_lsm_i2c_accel()
+            x = accel['x']
+            y = -accel['y']
+
+            angle_rad = math.atan2(x, y)
+            angle_deg = math.degrees(angle_rad)
+            if angle_deg < 0:
+                angle_deg += 360
+
+            return {
+                'display_angle': angle_deg,
+                'accel_x': x,
+                'accel_y': y,
+                'accel_z': accel['z']
+            }
+
+        if self.sensor_type == 'mpu':
+            accel = self._read_mpu_accel()
+            x = accel['x']
+            y = accel['y']
+
+            angle_rad = math.atan2(x, y)
             angle_deg = math.degrees(angle_rad)
             if angle_deg < 0:
                 angle_deg += 360
