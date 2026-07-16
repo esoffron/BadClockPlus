@@ -16,8 +16,13 @@ try:
     import smbus
     HAS_SMBUS = True
 except ImportError:
-    HAS_SMBUS = False
-    print("⚠ smbus not available - shake detection may not work optimally")
+    try:
+        import smbus2 as smbus
+        HAS_SMBUS = True
+    except ImportError:
+        HAS_SMBUS = False
+        smbus = None
+        print("⚠ smbus/smbus2 not available - accelerometer reads will use simulation mode")
 
 try:
     from evdev import InputDevice, ecodes
@@ -112,7 +117,8 @@ class SensorReader:
             print("  Calculating: Display rotation from gravity projection")
             print()
             return True
-        except:
+        except Exception as e:
+            print(f"⚠ LSM303DLHC initialization failed: {e}")
             return False
 
     def _init_sense_hat(self):
@@ -131,9 +137,11 @@ class SensorReader:
             print("  Calculating: Display rotation from gravity projection")
             print()
             return True
-        except ImportError:
+        except ImportError as e:
+            print(f"⚠ Sense HAT library not available: {e}")
             return False
-        except Exception:
+        except Exception as e:
+            print(f"⚠ Sense HAT initialization failed: {e}")
             return False
 
     def read_raw_accel_for_shake(self):
