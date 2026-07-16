@@ -136,8 +136,9 @@ export function initRecorder(clockEl, clock) {
     console.log(`[recorder] Canvas wrapper active (${RECORD_SIZE}x${RECORD_SIZE})`);
 
     // --- Recording state ---
-    let encoder = null;
-    let muxer = null;
+    let output = null;
+    let videoSource = null;
+    let captureQueue = Promise.resolve();
     let frameCount = 0;
     let stopTimer = null;
     let recordingLabel = null;
@@ -147,33 +148,23 @@ export function initRecorder(clockEl, clock) {
 
         recordingLabel = label;
 
-        const { Muxer, ArrayBufferTarget } = await import('mp4-muxer');
+        const { Output, Mp4OutputFormat, BufferTarget, CanvasSource } = await import('mediabunny');
 
-        const target = new ArrayBufferTarget();
-        muxer = new Muxer({
-            target,
-            video: {
-                codec: 'avc',
-                width: RECORD_SIZE,
-                height: RECORD_SIZE,
-            },
-            fastStart: 'in-memory',
+        output = new Output({
+            format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
+            target: new BufferTarget(),
         });
 
-        encoder = new VideoEncoder({
-            output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-            error: (e) => console.error('[recorder] Encoder error:', e),
-        });
-
-        encoder.configure({
-            codec: 'avc1.4d0028',  // H.264 Main profile
-            width: RECORD_SIZE,
-            height: RECORD_SIZE,
+        videoSource = new CanvasSource(canvas, {
+            codec: 'avc',
             bitrate: 8_000_000,
-            framerate: 60,
+            keyFrameInterval: 1,
         });
+        output.addVideoTrack(videoSource);
+        await output.start();
 
         frameCount = 0;
+        captureQueue = Promise.resolve();
         recording = true;
 
         // Capture at fixed 60fps using rAF but only encoding when
@@ -190,11 +181,15 @@ export function initRecorder(clockEl, clock) {
 
             // Encode frames at fixed 60fps intervals
             while (nextFrameTime <= elapsed) {
-                const frame = new VideoFrame(canvas, {
-                    timestamp: frameCount * (1_000_000 / 60),  // fixed µs per frame
+                const frameNumber = frameCount;
+                const timestamp = frameNumber / 60;
+                const encodeOptions = { keyFrame: frameNumber % 60 === 0 };
+                captureQueue = captureQueue.then(() => (
+                    videoSource.add(timestamp, 1 / 60, encodeOptions)
+                )).catch((e) => {
+                    recording = false;
+                    console.error('[recorder] Encoder error:', e);
                 });
-                encoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
-                frame.close();
                 frameCount++;
                 nextFrameTime += FRAME_INTERVAL;
             }
@@ -215,11 +210,10 @@ export function initRecorder(clockEl, clock) {
         recording = false;
         if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
 
-        await encoder.flush();
-        encoder.close();
-        muxer.finalize();
+        await captureQueue;
+        await output.finalize();
 
-        const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+        const blob = new Blob([output.target.buffer], { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -229,8 +223,9 @@ export function initRecorder(clockEl, clock) {
 
         console.log(`[recorder] Saved badclock-${recordingLabel}.mp4 — ${frameCount} frames (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
 
-        encoder = null;
-        muxer = null;
+        output = null;
+        videoSource = null;
+        captureQueue = Promise.resolve();
         frameCount = 0;
         recordingLabel = null;
     }
