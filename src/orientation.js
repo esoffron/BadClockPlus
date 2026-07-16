@@ -12,6 +12,8 @@ export class OrientationSource {
         this.onError = null;       // (message: string) => void
         this.onConnected = null;   // () => void — called once when a source starts delivering data
         this._connected = false;
+        this._eventSource = null;
+        this._sseAttempt = 0;
     }
 
     start() {
@@ -19,11 +21,34 @@ export class OrientationSource {
     }
 
     startSSE() {
-        const eventSource = new EventSource('/stream');
+        const candidates = this._streamCandidates();
+        this._trySSE(candidates, 0);
+    }
+
+    _trySSE(candidates, index) {
+        if (index >= candidates.length) {
+            this.startGenericSensorAPI();
+            this.onError?.(`No orientation stream found. Tried: ${candidates.join(', ')}`);
+            return;
+        }
+
+        const url = candidates[index];
+        const attempt = ++this._sseAttempt;
+        const eventSource = new EventSource(url);
+        this._eventSource = eventSource;
+
+        const failover = () => {
+            if (attempt !== this._sseAttempt || this._connected) return;
+            eventSource.close();
+            this._trySSE(candidates, index + 1);
+        };
+
+        const timeout = setTimeout(failover, 2500);
 
         eventSource.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
+                clearTimeout(timeout);
 
                 // Server sends reload on startup — reload if we were already connected
                 if (data.reload) {
@@ -44,11 +69,29 @@ export class OrientationSource {
         };
 
         eventSource.onerror = () => {
-            if (eventSource.readyState === EventSource.CLOSED) {
-                eventSource.close();
-                this.startGenericSensorAPI();
-            }
+            failover();
         };
+    }
+
+    _streamCandidates() {
+        const params = new URLSearchParams(window.location.search);
+        const configured = params.get('stream') || params.get('sensor');
+        const candidates = [];
+
+        if (configured) {
+            candidates.push(configured);
+        }
+
+        if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+            candidates.push(new URL('/stream', window.location.origin).href);
+        }
+
+        // When the UI is served from GitHub Pages or file:// on the Pi, the
+        // hardware bridge still runs on the Pi's local Flask server.
+        candidates.push('http://localhost:5000/stream');
+        candidates.push('http://127.0.0.1:5000/stream');
+
+        return [...new Set(candidates)];
     }
 
     startGenericSensorAPI() {

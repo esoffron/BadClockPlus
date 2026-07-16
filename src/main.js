@@ -30,7 +30,7 @@ window.addEventListener('load', () => {
     //
     // States: 'digital' | 'analog' | 'crown'
     //
-    let view = 'digital';
+    let view = 'analog';
 
     const gestures = new GestureDetector(() => clock.displayRotation);
     debug.gestures = gestures;

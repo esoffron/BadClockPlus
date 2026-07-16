@@ -158,7 +158,10 @@ export class DebugPanel {
 
     /** Call when new accel data arrives (so the debug display can show x/y/z). */
     updateAccelData(data) {
-        this.lastAccelData = data;
+        this.lastAccelData =
+            Number.isFinite(data?.x) && Number.isFinite(data?.y) && Number.isFinite(data?.z)
+                ? data
+                : null;
     }
 
     /** Call when winding event occurs (rotary encoder). */

@@ -27,6 +27,7 @@ export class Clock {
         this.modes = new ModeSwitcher();
         this.modes.add('digital', digitalEl);
         this.modes.add('analog', analogEl);
+        this.modes.setInitial('analog');
 
         // Rotation — tracks device orientation
         this.rotation = new RotationController();

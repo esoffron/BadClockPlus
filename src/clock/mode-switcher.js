@@ -22,6 +22,18 @@ export class ModeSwitcher {
         return this.modes[this.currentIndex]?.name;
     }
 
+    setInitial(name) {
+        const targetIndex = this.modes.findIndex(m => m.name === name);
+        if (targetIndex === -1) return;
+
+        this.currentIndex = targetIndex;
+        for (let i = 0; i < this.modes.length; i++) {
+            const { element } = this.modes[i];
+            element.style.transition = 'none';
+            element.style.translate = i < targetIndex ? '-100%' : i > targetIndex ? '100%' : '0';
+        }
+    }
+
     switchTo(name) {
         const targetIndex = this.modes.findIndex(m => m.name === name);
         if (targetIndex === -1 || targetIndex === this.currentIndex) return;
