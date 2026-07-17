@@ -43,12 +43,13 @@ def scan_i2c():
         0x39: "TSL2561 Light Sensor / APDS-9960",
         0x46: "Unknown (kernel driver active)",
         0x53: "ADXL345 Accelerometer",
-        0x5c: "AM2320 Temp/Humidity",
+        0x5c: "LPS22HB Pressure/Temperature or AM2320 Temp/Humidity",
         0x5f: "HTS221 Humidity",
         0x68: "ICM-20948 IMU (Waveshare Sense HAT B) or MPU6050/MPU9250",
         0x69: "MPU6050/MPU9250 IMU (alt address)",
         0x6a: "LSM6DS3 or LSM9DS1 IMU (Sense HAT)",
         0x6b: "LSM9DS1 IMU",
+        0x70: "SHTC3 Temperature/Humidity (Waveshare Sense HAT B)",
     }
     
     for addr in devices_found:
@@ -247,6 +248,114 @@ def test_lis3dh(bus, addr):
         print(f"  ❌ Error: {e}")
         return False
 
+
+def write_command(bus, addr, command):
+    """Write a 16-bit command to command-oriented I2C sensors."""
+    bus.write_i2c_block_data(addr, (command >> 8) & 0xff, [command & 0xff])
+
+
+def test_shtc3(bus, addr=0x70):
+    """Test SHTC3 temperature/humidity sensor used by Waveshare Sense HAT (B)."""
+    try:
+        # Wake, read ID, then take a temperature-first measurement.
+        write_command(bus, addr, 0x3517)
+        time.sleep(0.002)
+
+        write_command(bus, addr, 0xEFC8)
+        time.sleep(0.002)
+        sensor_id = bus.read_i2c_block_data(addr, 0, 3)
+        print(f"  ID bytes: {' '.join(f'0x{x:02x}' for x in sensor_id)}")
+
+        write_command(bus, addr, 0x7CA2)
+        time.sleep(0.020)
+        data = bus.read_i2c_block_data(addr, 0, 6)
+
+        raw_temp = (data[0] << 8) | data[1]
+        raw_humidity = (data[3] << 8) | data[4]
+        temp_c = -45 + 175 * raw_temp / 65535.0
+        humidity = 100 * raw_humidity / 65535.0
+
+        write_command(bus, addr, 0xB098)
+
+        print(f"  Temperature: {temp_c:.1f}°C / {temp_c * 9 / 5 + 32:.1f}°F")
+        print(f"  Humidity: {humidity:.1f}%")
+        print("  ✓ SHTC3 temperature/humidity sensor working!")
+        return True
+    except Exception as e:
+        print(f"  ❌ SHTC3 error: {e}")
+        return False
+
+
+def test_lps22hb(bus, addr=0x5c):
+    """Test LPS22HB pressure sensor; it also provides a temperature reading."""
+    try:
+        who = bus.read_byte_data(addr, 0x0F)
+        print(f"  WHO_AM_I: 0x{who:02x} (expected LPS22HB: 0xb1)")
+        if who != 0xB1:
+            return False
+
+        # CTRL_REG1: 1 Hz output data rate, block data update enabled.
+        bus.write_byte_data(addr, 0x10, 0x12)
+        time.sleep(0.1)
+
+        temp_l = bus.read_byte_data(addr, 0x2B)
+        temp_h = bus.read_byte_data(addr, 0x2C)
+        raw_temp = (temp_h << 8) | temp_l
+        if raw_temp > 32767:
+            raw_temp -= 65536
+        temp_c = raw_temp / 100.0
+
+        press_xl = bus.read_byte_data(addr, 0x28)
+        press_l = bus.read_byte_data(addr, 0x29)
+        press_h = bus.read_byte_data(addr, 0x2A)
+        raw_pressure = (press_h << 16) | (press_l << 8) | press_xl
+        if raw_pressure > 0x7fffff:
+            raw_pressure -= 0x1000000
+        pressure_hpa = raw_pressure / 4096.0
+
+        print(f"  Temperature: {temp_c:.1f}°C / {temp_c * 9 / 5 + 32:.1f}°F")
+        print(f"  Pressure: {pressure_hpa:.1f} hPa")
+        print("  ✓ LPS22HB pressure/temperature sensor working!")
+        return True
+    except Exception as e:
+        print(f"  ❌ LPS22HB error: {e}")
+        return False
+
+
+def test_am2320(bus, addr=0x5c):
+    """Try AM2320 temp/humidity protocol for boards where 0x5c is not LPS22HB."""
+    try:
+        try:
+            bus.write_byte(addr)
+        except Exception:
+            pass
+        time.sleep(0.003)
+
+        bus.write_i2c_block_data(addr, 0x03, [0x00, 0x04])
+        time.sleep(0.003)
+        data = bus.read_i2c_block_data(addr, 0, 8)
+
+        if data[0] != 0x03 or data[1] != 0x04:
+            print(f"  Unexpected AM2320 response: {' '.join(f'0x{x:02x}' for x in data)}")
+            return False
+
+        raw_humidity = (data[2] << 8) | data[3]
+        raw_temp = (data[4] << 8) | data[5]
+        negative = raw_temp & 0x8000
+        raw_temp &= 0x7fff
+        temp_c = raw_temp / 10.0
+        if negative:
+            temp_c = -temp_c
+        humidity = raw_humidity / 10.0
+
+        print(f"  Temperature: {temp_c:.1f}°C / {temp_c * 9 / 5 + 32:.1f}°F")
+        print(f"  Humidity: {humidity:.1f}%")
+        print("  ✓ AM2320 temperature/humidity sensor working!")
+        return True
+    except Exception as e:
+        print(f"  ❌ AM2320 error: {e}")
+        return False
+
 def main():
     result = scan_i2c()
     if result is None:
@@ -306,6 +415,38 @@ def main():
         print("  • Faulty sensor")
         print()
         print("The clock will run in simulation mode.")
+
+    print()
+    print("=" * 60)
+    print("Testing Environmental Sensors")
+    print("=" * 60)
+    print()
+
+    found_environment = False
+
+    if 0x70 in devices:
+        print("Testing SHTC3 temperature/humidity at 0x70:")
+        if test_shtc3(bus, 0x70):
+            found_environment = True
+        print()
+
+    if 0x5c in devices:
+        print("Testing LPS22HB pressure/temperature at 0x5c:")
+        if test_lps22hb(bus, 0x5c):
+            found_environment = True
+        print()
+
+        print("Testing AM2320 temperature/humidity at 0x5c:")
+        if test_am2320(bus, 0x5c):
+            found_environment = True
+        print()
+
+    if found_environment:
+        print("=" * 60)
+        print("✓ Environmental sensor found and working!")
+    else:
+        print("=" * 60)
+        print("❌ No working environmental sensor detected")
 
 def live_lsm303dlhc(bus):
     """Continuously print LSM303DLHC accel readings for axis calibration"""
