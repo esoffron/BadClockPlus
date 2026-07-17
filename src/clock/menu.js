@@ -12,11 +12,11 @@ const BUTTON_HEIGHT = 0.55;
 const CLOSE_RADIUS = 0.45;  // slightly larger than pill height
 
 const MENU_ITEMS = [
-    { label: 'Reset',  action: 'reset',  modes: ['digital', 'analog'] },
+    { label: 'Reset',  action: 'reset',  modes: ['digital', 'analog', 'alphabetical'] },
     { label: 'Shake',  action: 'shake',  modes: ['analog'] },
     { label: 'Beans',  action: 'beans',  modes: ['analog'] },
-    { label: 'Toasters', action: 'toasters', modes: ['digital', 'analog'] },
-    { label: 'Random', action: 'random', modes: ['digital', 'analog'] },
+    { label: 'Toasters', action: 'toasters', modes: ['digital', 'analog', 'alphabetical'] },
+    { label: 'Random', action: 'random', modes: ['digital', 'analog', 'alphabetical'] },
 ];
 
 export class Menu {

@@ -21,6 +21,7 @@ window.addEventListener('load', () => {
 
     // Clock — owns faces, modes, rotation, shake detection
     const clock = new Clock(clockEl);
+    window.clock = clock;
 
     // Debug panel
     const debug = new DebugPanel();
@@ -47,18 +48,28 @@ window.addEventListener('load', () => {
         switch (view) {
             case 'digital':
                 if (zone === 'right' && direction === 'left') {
-                    clock.nextMode();
-                    view = 'analog';
+                    view = clock.nextMode();
+                } else if (zone === 'left' && direction === 'right') {
+                    view = clock.prevMode();
                 }
                 break;
 
             case 'analog':
                 if (zone === 'left' && direction === 'right') {
-                    clock.prevMode();
-                    view = 'digital';
+                    view = clock.prevMode();
                 } else if (zone === 'right' && direction === 'left') {
                     clock.showCrown();
                     view = 'crown';
+                } else if (direction === 'left') {
+                    view = clock.nextMode();
+                }
+                break;
+
+            case 'alphabetical':
+                if (direction === 'right') {
+                    view = clock.prevMode();
+                } else if (direction === 'left') {
+                    view = clock.nextMode();
                 }
                 break;
 
@@ -142,9 +153,6 @@ window.addEventListener('load', () => {
     if (screen.orientation && typeof screen.orientation.lock === 'function') {
         screen.orientation.lock(screen.orientation.type).catch(() => {});
     }
-
-    // Expose for debug console
-    window.clock = clock;
 
     // Dev-only recorder (dynamic import — excluded from production build)
     if (import.meta.env.DEV) {

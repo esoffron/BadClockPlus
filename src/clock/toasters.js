@@ -3,6 +3,7 @@ import './toasters.css';
 const MAX_TOASTERS = 18;
 const MIN_DELAY = 280;
 const MAX_DELAY = 900;
+const SCHEDULED_BURST_COUNT = 7;
 
 export class ToasterSwarm {
     constructor(clockElement) {
@@ -18,11 +19,17 @@ export class ToasterSwarm {
             '#analog-toasters-back',
             'toasters-back toaster-layer toaster-layer--back'
         );
+        this.alphabeticalBackLayer = this._ensureLayer(
+            clockElement.querySelector('#alphabetical'),
+            '#alphabetical-toasters-back',
+            'toasters-back toaster-layer toaster-layer--back'
+        );
 
-        this.active = true;
+        this.active = false;
         this.mode = 'digital';
         this._timer = null;
         this._inFlight = 0;
+        this._scheduledBurstKey = null;
         this._reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
         if (this._reducedMotion) {
@@ -31,13 +38,13 @@ export class ToasterSwarm {
             return;
         }
 
-        this._schedule(200);
+        this._setPaused(false);
     }
 
     setActive(active) {
         if (this.active === active) return;
         this.active = active;
-        this._setPaused(!active);
+        this._setPaused(false);
 
         if (active) {
             this._schedule(100);
@@ -47,6 +54,7 @@ export class ToasterSwarm {
             this.frontLayer.replaceChildren();
             this.digitalBackLayer.replaceChildren();
             this.analogBackLayer.replaceChildren();
+            this.alphabeticalBackLayer.replaceChildren();
             this._inFlight = 0;
         }
     }
@@ -55,16 +63,32 @@ export class ToasterSwarm {
         this.mode = mode;
     }
 
+    updateSchedule(now = new Date()) {
+        if (this._reducedMotion || this.active) return;
+
+        const minute = now.getMinutes();
+        const second = now.getSeconds();
+        const key = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${minute}`;
+
+        if (minute % 5 !== 0 || second !== 0) {
+            return;
+        }
+
+        if (this._scheduledBurstKey === key) return;
+        this._scheduledBurstKey = key;
+        this.burst(SCHEDULED_BURST_COUNT, { force: true });
+    }
+
     toggle() {
         this.setActive(!this.active);
         return this.active;
     }
 
-    burst(count = 4) {
-        if (!this.active) this.setActive(true);
+    burst(count = 4, options = {}) {
+        if (!this.active && !options.force) this.setActive(true);
         const capped = Math.max(1, Math.min(count, MAX_TOASTERS));
         for (let i = 0; i < capped; i++) {
-            window.setTimeout(() => this._launch(), i * 140);
+            window.setTimeout(() => this._launch(options), i * 140);
         }
     }
 
@@ -77,8 +101,8 @@ export class ToasterSwarm {
         }, delay);
     }
 
-    _launch() {
-        if (!this.active || this._inFlight >= MAX_TOASTERS) return;
+    _launch(options = {}) {
+        if ((!this.active && !options.force) || this._inFlight >= MAX_TOASTERS) return;
 
         const layer = this._pickLayer();
         const rect = layer.getBoundingClientRect();
@@ -116,7 +140,9 @@ export class ToasterSwarm {
 
     _pickLayer() {
         if (Math.random() < 0.48) return this.frontLayer;
-        return this.mode === 'analog' ? this.analogBackLayer : this.digitalBackLayer;
+        if (this.mode === 'analog') return this.analogBackLayer;
+        if (this.mode === 'alphabetical') return this.alphabeticalBackLayer;
+        return this.digitalBackLayer;
     }
 
     _ensureLayer(parent, selector, className) {
@@ -135,6 +161,7 @@ export class ToasterSwarm {
         this.frontLayer.classList.toggle('paused', paused);
         this.digitalBackLayer.classList.toggle('paused', paused);
         this.analogBackLayer.classList.toggle('paused', paused);
+        this.alphabeticalBackLayer.classList.toggle('paused', paused);
     }
 
     _createFlyingObject() {

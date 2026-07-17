@@ -3,6 +3,7 @@
  * Owns the clock faces, mode switching, rotation, and shake detection internally.
  */
 import { AnalogClock } from './clock/analog.js';
+import { AlphabeticalClock } from './clock/alphabetical.js';
 import { DigitalClock } from './clock/digital.js';
 import { Hand } from './clock/hand.js';
 import { Menu } from './clock/menu.js';
@@ -19,14 +20,17 @@ export class Clock {
         // Clock faces
         const analogEl = el.querySelector('#analog');
         const digitalEl = el.querySelector('#digital');
+        const alphabeticalEl = el.querySelector('#alphabetical');
         this.analogClock = new AnalogClock(analogEl, this.time);
         this.digitalClock = new DigitalClock(digitalEl, this.time);
+        this.alphabeticalClock = new AlphabeticalClock(alphabeticalEl, this.time);
         this.toasters = new ToasterSwarm(el);
 
         // Mode switching
         this.modes = new ModeSwitcher();
         this.modes.add('digital', digitalEl);
         this.modes.add('analog', analogEl);
+        this.modes.add('alphabetical', alphabeticalEl);
         this.modes.setInitial('analog');
 
         // Rotation — tracks device orientation
@@ -90,11 +94,13 @@ export class Clock {
         this.modes.next();
         this._modeSwitchUntil = Date.now() + 400;
         this._updateVisibility();
+        return this.currentMode;
     }
     prevMode() {
         this.modes.prev();
         this._modeSwitchUntil = Date.now() + 400;
         this._updateVisibility();
+        return this.currentMode;
     }
 
     /* ---- Crown ---- */
@@ -276,7 +282,9 @@ export class Clock {
     triggerRandomQuirk() {
         const quirks = this.currentMode === 'digital'
             ? ['flicker', 'decay']
-            : ['shake', 'beans', 'overwind', 'toasters'];
+            : this.currentMode === 'alphabetical'
+                ? ['toasters']
+                : ['shake', 'beans', 'overwind', 'toasters'];
         const pick = quirks[Math.floor(Math.random() * quirks.length)];
         switch (pick) {
             case 'shake':    this.enterShakeMode(); break;
@@ -335,10 +343,16 @@ export class Clock {
 
         const switching = Date.now() < this._modeSwitchUntil;
         this.toasters.setMode(this.currentMode);
-        this.analogClock.visible = this.currentMode !== 'digital' || switching;
-        this.analogClock.update();
+        this.toasters.updateSchedule(new Date(Date.now() + this.time.value));
+        this.analogClock.visible = this.currentMode === 'analog' || switching;
+        if (this.currentMode === 'analog' || switching) {
+            this.analogClock.update();
+        }
         if (this.currentMode === 'digital' || switching) {
             this.digitalClock.update();
+        }
+        if (this.currentMode === 'alphabetical' || switching) {
+            this.alphabeticalClock.update();
         }
 
         // Check for DST transitions (throttled — every ~300 frames ≈ 5s)

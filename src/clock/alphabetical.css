@@ -1,0 +1,108 @@
+#alphabetical {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background: #f5f3ee;
+    color: #171717;
+}
+
+.alphabetical-face {
+    position: relative;
+    z-index: 2;
+    width: 96%;
+    height: 96%;
+}
+
+.alphabetical-dial {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.alphabetical-time {
+    position: absolute;
+    left: 50%;
+    top: 61%;
+    z-index: 3;
+    width: 62%;
+    transform: translateX(-50%);
+    text-align: center;
+    pointer-events: none;
+}
+
+.alphabetical-spelled {
+    min-height: 2.3em;
+    color: #171717;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(13px, 3.1vmin, 30px);
+    line-height: 1.15;
+}
+
+.alphabetical-real {
+    margin-top: 0.35em;
+    color: #777;
+    font-family: 'Barlow', Arial, sans-serif;
+    font-size: clamp(10px, 1.8vmin, 16px);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+}
+
+.alphabetical-tick {
+    stroke: #171717;
+    stroke-linecap: butt;
+}
+
+.alphabetical-label {
+    fill: #171717;
+    font-family: 'Barlow', Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: fill 0.2s ease, font-size 0.2s ease;
+}
+
+.alphabetical-extra-label {
+    fill: transparent;
+    font-family: 'Barlow', Arial, sans-serif;
+    font-size: 8.5px;
+    font-weight: 500;
+    transition: fill 0.2s ease, font-size 0.2s ease;
+}
+
+.alphabetical-label.active,
+.alphabetical-extra-label.active {
+    fill: #d42020;
+    font-weight: 700;
+}
+
+.alphabetical-extra-label.active {
+    font-size: 10.5px;
+}
+
+.alphabetical-hand rect,
+.alphabetical-hand circle {
+    transition: fill 0.2s ease;
+}
+
+#alphabetical-hour rect {
+    fill: #171717;
+}
+
+#alphabetical-minute rect {
+    fill: #171717;
+}
+
+#alphabetical-second rect,
+#alphabetical-second circle {
+    fill: #d42020;
+}
+
+#alphabetical-toasters-back {
+    z-index: 1;
+}
