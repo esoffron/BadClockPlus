@@ -8,6 +8,7 @@ import { DigitalClock } from './clock/digital.js';
 import { Hand } from './clock/hand.js';
 import { Menu } from './clock/menu.js';
 import { ModeSwitcher } from './clock/mode-switcher.js';
+import { SnakeGame } from './clock/snake-game.js';
 import { ToasterSwarm } from './clock/toasters.js';
 import { RotationController } from './rotation-controller.js';
 import { ShakeDetector } from './shake-detector.js';
@@ -25,6 +26,10 @@ export class Clock {
         this.digitalClock = new DigitalClock(digitalEl, this.time);
         this.alphabeticalClock = new AlphabeticalClock(alphabeticalEl, this.time);
         this.toasters = new ToasterSwarm(el);
+        this.snakeGame = new SnakeGame(el);
+        this.effectMode = 'toasters';
+        this.effectAlwaysOn = false;
+        this._scheduledEffectKey = null;
 
         // Mode switching
         this.modes = new ModeSwitcher();
@@ -207,12 +212,20 @@ export class Clock {
         beans: () => this.analogClock.debugBeans(),
         toasters: (on) => {
             if (typeof on === 'boolean') {
-                this.toasters.setActive(on);
-                return this.toasters.active;
+                this.setEffectMode('toasters');
+                return this.setEffectAlwaysOn(on);
             }
-            return this.toasters.toggle();
+            this.setEffectMode('toasters');
+            return this.setEffectAlwaysOn(!this.effectAlwaysOn);
         },
+        effect: (mode) => this.setEffectMode(mode),
+        effectAlwaysOn: (on) => this.setEffectAlwaysOn(on),
+        effectBurst: () => this._triggerScheduledEffect(),
         toasterBurst: (count = 5) => this.toasters.burst(count),
+        snake: (on) => {
+            this.setEffectMode('snake');
+            return this.setEffectAlwaysOn(on ?? !this.effectAlwaysOn);
+        },
         flicker: () => this.digitalClock.debugFlicker(),
         decay: (min = 5) => this.digitalClock.debugDecay(min),
         shake: () => this.enterShakeMode(),
@@ -226,8 +239,11 @@ export class Clock {
                 'energy(0..1)':    'Set crown winding energy',
                 'crown(bool)':     'Show/hide the crown',
                 'beans()':         'Pour baked beans onto the clock face',
-                'toasters(bool)':   'Toggle flying toasters',
+                'toasters(bool)':   'Select flying toasters and toggle always-on',
                 'toasterBurst(n)':  'Launch a burst of flying toasters',
+                'snake(bool)':      'Select snake and toggle always-on',
+                'effect(mode)':     'Select five-minute effect: toasters|snake',
+                'effectBurst()':    'Run the selected scheduled effect',
                 'flicker()':       'Random digital segment flicker',
                 'decay(minutes)':  'Age digital segments',
                 'shake()':         'Enter gravity mode',
@@ -279,18 +295,74 @@ export class Clock {
         this.analogClock.setCurrentTime();
     }
 
+    setEffectMode(mode) {
+        if (!['toasters', 'snake'].includes(mode)) return this.effectMode;
+        if (this.effectMode === mode) return this.effectMode;
+
+        this.effectMode = mode;
+        this._stopEffects();
+        if (this.effectAlwaysOn) {
+            this._setCurrentEffectActive(true);
+        }
+        return this.effectMode;
+    }
+
+    setEffectAlwaysOn(active) {
+        this.effectAlwaysOn = Boolean(active);
+        this._stopEffects();
+        if (this.effectAlwaysOn) {
+            this._setCurrentEffectActive(true);
+        }
+        return this.effectAlwaysOn;
+    }
+
+    _setCurrentEffectActive(active) {
+        if (this.effectMode === 'snake') {
+            this.snakeGame.setActive(active);
+        } else {
+            this.toasters.setActive(active);
+        }
+    }
+
+    _stopEffects() {
+        this.toasters.setActive(false);
+        this.snakeGame.setActive(false);
+    }
+
+    _triggerScheduledEffect() {
+        if (this.effectMode === 'snake') {
+            this.snakeGame.burst();
+        } else {
+            this.toasters.burst(7, { force: true });
+        }
+    }
+
+    _updateScheduledEffect(now) {
+        if (this.effectAlwaysOn) return;
+
+        const minute = now.getMinutes();
+        const second = now.getSeconds();
+        if (minute % 5 !== 0 || second !== 0) return;
+
+        const key = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${minute}`;
+        if (this._scheduledEffectKey === key) return;
+
+        this._scheduledEffectKey = key;
+        this._triggerScheduledEffect();
+    }
+
     triggerRandomQuirk() {
         const quirks = this.currentMode === 'digital'
             ? ['flicker', 'decay']
             : this.currentMode === 'alphabetical'
-                ? ['toasters']
-                : ['shake', 'beans', 'overwind', 'toasters'];
+                ? ['effect']
+                : ['shake', 'beans', 'overwind', 'effect'];
         const pick = quirks[Math.floor(Math.random() * quirks.length)];
         switch (pick) {
             case 'shake':    this.enterShakeMode(); break;
             case 'beans':    this.analogClock.debugBeans(); break;
             case 'overwind': this.analogClock.debugOverwind(); break;
-            case 'toasters': this.toasters.burst(5); break;
+            case 'effect':   this._triggerScheduledEffect(); break;
             case 'dst':      this.simulateDST(); break;
             case 'flicker':  this.digitalClock.debugFlicker(); break;
             case 'decay':    this.digitalClock.debugDecay(Math.floor(Math.random() * 30) + 1); break;
@@ -302,7 +374,7 @@ export class Clock {
             case 'reset':  setTimeout(() => window.location.reload(), 2700); break;
             case 'shake':  this.enterShakeMode(); break;
             case 'beans':  this.analogClock.debugBeans(); break;
-            case 'toasters': this.toasters.toggle(); break;
+            case 'effect': this.setEffectAlwaysOn(!this.effectAlwaysOn); break;
             case 'random': this.triggerRandomQuirk(); break;
         }
     }
@@ -343,7 +415,8 @@ export class Clock {
 
         const switching = Date.now() < this._modeSwitchUntil;
         this.toasters.setMode(this.currentMode);
-        this.toasters.updateSchedule(new Date(Date.now() + this.time.value));
+        this.snakeGame.setMode(this.currentMode);
+        this._updateScheduledEffect(new Date(Date.now() + this.time.value));
         this.analogClock.visible = this.currentMode === 'analog' || switching;
         if (this.currentMode === 'analog' || switching) {
             this.analogClock.update();

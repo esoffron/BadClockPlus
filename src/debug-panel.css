@@ -154,6 +154,24 @@
     cursor: pointer;
 }
 
+.debug-field-label {
+    color: #ecf0f1;
+    font-size: 12px;
+    font-family: monospace;
+    margin-top: 4px;
+}
+
+.debug-select {
+    width: 100%;
+    color: #ecf0f1;
+    background: rgba(20, 20, 20, 0.95);
+    border: 1px solid rgba(236, 240, 241, 0.35);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
 .slider-row {
     margin-top: 6px;
 }

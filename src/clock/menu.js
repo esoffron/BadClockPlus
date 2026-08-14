@@ -15,7 +15,7 @@ const MENU_ITEMS = [
     { label: 'Reset',  action: 'reset',  modes: ['digital', 'analog', 'alphabetical'] },
     { label: 'Shake',  action: 'shake',  modes: ['analog'] },
     { label: 'Beans',  action: 'beans',  modes: ['analog'] },
-    { label: 'Toasters', action: 'toasters', modes: ['digital', 'analog', 'alphabetical'] },
+    { label: 'Effect', action: 'effect', modes: ['digital', 'analog', 'alphabetical'] },
     { label: 'Random', action: 'random', modes: ['digital', 'analog', 'alphabetical'] },
 ];
 

@@ -67,10 +67,16 @@ export class DebugPanel {
             clock.debug.setForceDetachOnDrag(e.target.checked);
         });
 
-        const flyingToastersCheckbox = document.getElementById('flying-toasters-checkbox');
-        flyingToastersCheckbox.checked = clock.toasters.active;
-        flyingToastersCheckbox.addEventListener('change', (e) => {
-            clock.debug.toasters(e.target.checked);
+        const effectSelect = document.getElementById('scheduled-effect-select');
+        effectSelect.value = clock.effectMode;
+        effectSelect.addEventListener('change', (e) => {
+            clock.setEffectMode(e.target.value);
+        });
+
+        const effectAlwaysOnCheckbox = document.getElementById('effect-always-on-checkbox');
+        effectAlwaysOnCheckbox.checked = clock.effectAlwaysOn;
+        effectAlwaysOnCheckbox.addEventListener('change', (e) => {
+            clock.setEffectAlwaysOn(e.target.checked);
         });
 
         const orientSlider = document.getElementById('orientation-slider');
